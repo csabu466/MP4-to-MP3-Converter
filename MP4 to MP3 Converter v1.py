@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
+from PIL import Image, ImageTk
 import subprocess
 import threading
 import os
@@ -27,6 +28,15 @@ def select_album_art():
     global album_art_path
     album_art_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.png;*.jpg;*.jpeg")])
     album_art_label.config(text=album_art_path)
+    if album_art_path:
+        display_image_preview(album_art_path)
+
+def display_image_preview(image_path):
+    img = Image.open(image_path)
+    img = img.resize((100, 100), Image.LANCZOS)
+    img = ImageTk.PhotoImage(img)
+    album_art_preview.config(image=img)
+    album_art_preview.image = img
 
 def convert_to_mp3():
     global file_paths, album_art_path
@@ -42,14 +52,21 @@ def convert_to_mp3():
     for idx, file_path in enumerate(file_paths):
         output_file = os.path.join(os.path.dirname(file_path), f"{prefix}_{idx}.mp3")
         if album_art_path:
-            command = f"ffmpeg -i \"{file_path}\" -i \"{album_art_path}\" -map 0:0 -map 1:0 -c copy -id3v2_version 3 -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" -b:a {bitrate.get()} \"{output_file}\""
+            command = f"ffmpeg -i \"{file_path}\" -i \"{album_art_path}\" -map 0:a -map 1 -c:a libmp3lame -b:a {bitrate.get()} -id3v2_version 3 -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" \"{output_file}\""
         else:
-            command = f"ffmpeg -i \"{file_path}\" -vn -b:a {bitrate.get()} \"{output_file}\""
+            command = f"ffmpeg -i \"{file_path}\" -vn -c:a libmp3lame -b:a {bitrate.get()} \"{output_file}\""
+        
+        print(f"Executing command: {command}")
         
         try:
-            subprocess.call(command, shell=True)
-            status_label.config(text=f"Converted: {file_path}")
-            progress_var.set(idx + 1)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            if result.returncode != 0:
+                messagebox.showerror("Conversion failed", f"An error occurred: {result.stderr}")
+                return
+            else:
+                print(f"Command output: {result.stdout}")
+                status_label.config(text=f"Converted: {file_path}")
+                progress_var.set(idx + 1)
         except Exception as e:
             messagebox.showerror("Conversion failed", f"An error occurred: {e}")
 
@@ -67,6 +84,7 @@ def clear_fields():
     file_list_text.delete(1.0, tk.END)
     file_list_text.config(state=tk.DISABLED)
     album_art_label.config(text="")
+    album_art_preview.config(image="")
     success_label.config(text="")
     progress_var.set(0)
     status_label.config(text="")
@@ -91,6 +109,7 @@ convert_button = tk.Button(root, text="Convert to MP3", command=convert_to_mp3_a
 open_button = tk.Button(root, text="Open Output Folder", command=open_output_folder)
 album_art_label = tk.Label(root, text="")
 select_album_art_button = tk.Button(root, text="Select Album Art", command=select_album_art)
+album_art_preview = tk.Label(root)
 status_label = tk.Label(root, text="")
 success_label = tk.Label(root, text="")
 
@@ -112,8 +131,9 @@ filename_prefix_label.grid(row=2, column=0, pady=5, padx=10, sticky="w")
 filename_prefix_entry.grid(row=3, column=0, pady=5, padx=10, sticky="ew", columnspan=4)
 bitrate_label.grid(row=4, column=0, pady=5, padx=10, sticky="w")
 bitrate_frame.grid(row=5, column=0, pady=5, padx=10, sticky="ew", columnspan=4)
-album_art_label.grid(row=6, column=0, pady=5, padx=10, sticky="w", columnspan=4)
-select_album_art_button.grid(row=7, column=3, pady=5, padx=10, sticky="e")
+album_art_label.grid(row=6, column=0, pady=5, padx=10, sticky="w", columnspan=3)
+select_album_art_button.grid(row=6, column=3, pady=5, padx=10, sticky="e")
+album_art_preview.grid(row=7, column=3, pady=5, padx=10, sticky="e")
 progress_bar.grid(row=8, column=0, pady=5, padx=10, sticky="ew", columnspan=4)
 select_button.grid(row=9, column=0, pady=5, padx=10, sticky="w")
 convert_button.grid(row=9, column=1, pady=5, padx=10, sticky="w")
